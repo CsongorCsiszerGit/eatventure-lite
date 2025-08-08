@@ -1,6 +1,23 @@
 // Eatventure-lite Starter (no libs). Mobile-first. Pointer Events.
 const $ = (s)=>document.querySelector(s);
 
+// Consistent burger icon (SVG as data URI), same on all devices
+const burgerImg = new Image();
+burgerImg.src =
+  'data:image/svg+xml;utf8,' +
+  encodeURIComponent(`
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <rect x="16" y="70" width="96" height="16" rx="8" fill="#7a3e2d"/>
+  <rect x="12" y="58" width="104" height="12" rx="6" fill="#3b7420"/>
+  <rect x="10" y="44" width="108" height="14" rx="8" fill="#e8b04b"/>
+  <rect x="8"  y="28" width="112" height="18" rx="9" fill="#f5c26b"/>
+  <circle cx="28" cy="34" r="2" fill="#fff6c7"/>
+  <circle cx="44" cy="31" r="2" fill="#fff6c7"/>
+  <circle cx="64" cy="35" r="2" fill="#fff6c7"/>
+  <circle cx="84" cy="32" r="2" fill="#fff6c7"/>
+  <circle cx="100" cy="36" r="2" fill="#fff6c7"/>
+</svg>`);
+
 const state = {
   coins: 0,
   perTap: 1,
@@ -71,7 +88,6 @@ function renderUI(){
 // --- Input
 function onTap(){
   state.coins += state.perTap;
-  // pop text feedback
   pops.push({x: vw/2, y: vh*0.55, text: `+${fmt(state.perTap)}`, t: 0});
   pulse = 1.0;
 }
@@ -84,7 +100,6 @@ function doUpgrade(){
   const inc = Math.max(1, Math.floor(state.perTap * 0.5));
   state.perTap += inc;
   state.upgradeCost = Math.ceil(state.upgradeCost * 1.45);
-  // stage up every few upgrades
   if (state.perTap >= (5 * (state.stageIdx+1)) && state.stageIdx < state.stages.length-1) {
     state.stageIdx++;
     flash("New stage unlocked!");
@@ -124,9 +139,9 @@ function draw(){
   ctx.fillStyle = "#1c2250"; ctx.fill();
   ctx.strokeStyle = "#0c0f24"; ctx.lineWidth = 6; ctx.stroke();
 
-  // burger emoji
-  ctx.font = `${Math.floor(r*0.9)}px serif`;
-  ctx.fillText("🍔", cx2, cy2+Math.floor(r*0.02));
+  // burger image (consistent across devices)
+  const size = r * 1.6;
+  ctx.drawImage(burgerImg, cx2 - size/2, cy2 - size/2, size, size);
 
   // floating pops
   for (let i=pops.length-1;i>=0;i--){
@@ -169,7 +184,6 @@ el.resetBtn.addEventListener("pointerdown", ()=>{ reset(); renderUI(); }, { pass
 // Resize handling (keeps internal resolution steady for simplicity)
 function onResize(){
   // Keep canvas internal size fixed (540x720) for now; CSS scales for device.
-  // Later we can match devicePixelRatio for sharper rendering.
 }
 window.addEventListener("resize", onResize);
 
