@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>Eatventure‑lite (Starter)</title>
+  <style>
+    :root {
+      --bg:#0f1221; --card:#171a2e; --text:#e8ecff; --muted:#a7b0d9;
+      --accent:#6ee7ff; --good:#6ee7a0; --warn:#ffd166;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      background: radial-gradient(1200px 1200px at 50% -200px, #182046, var(--bg) 60%);
+      color: var(--text);
+      touch-action: manipulation; /* prevent double-tap zoom delays */
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+    .wrap {
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      height: 100%;
+      max-width: 540px;
+      margin: 0 auto;
+    }
+    header, footer {
+      padding: 12px 14px;
+      background: linear-gradient(180deg, #171a2e, #12142a);
+      border-bottom: 1px solid #202645;
+    }
+    header .row { display:flex; gap:10px; align-items:center; justify-content:space-between; }
+    .stat { display:flex; gap:8px; align-items:center; padding:6px 10px; background:#12142a; border:1px solid #202645; border-radius:12px; }
+    .label { color: var(--muted); font-size: 12px; }
+    .val { font-weight: 700; }
+    #tapArea {
+      position: relative;
+      display: grid; place-items: center;
+      padding: 16px;
+    }
+    canvas { width: 100%; height: 100%; max-height: 62vh; background:#0e1020; border-top:1px solid #202645; border-bottom:1px solid #202645; }
+    .btns { display:grid; grid-template-columns: 1fr 1fr; gap:10px; padding: 12px 14px; background:#0f1221; }
+    button {
+      appearance: none; border: 1px solid #2a2f57; background:#181c39; color:var(--text);
+      font-weight: 700; border-radius: 14px; padding: 12px; font-size: 16px;
+      box-shadow: 0 6px 0 #0c0f24; transform: translateY(0); transition: transform .05s;
+    }
+    button:active { transform: translateY(2px); box-shadow: 0 4px 0 #0c0f24; }
+    .primary { border-color:#2a3557; background: linear-gradient(180deg, #1c2250, #15193a); }
+    .accent { outline: 2px solid rgba(110,231,255,.2); }
+    .good { outline: 2px solid rgba(110,231,160,.2); }
+    footer { display:flex; gap:10px; justify-content:space-between; align-items:center; }
+    .tiny { font-size: 12px; color:var(--muted); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="row">
+        <div class="stat"><span class="label">Coins</span> <span id="coins" class="val">0</span></div>
+        <div class="stat"><span class="label">Per Tap</span> <span id="perTap" class="val">1</span></div>
+        <div class="stat"><span class="label">Stage</span> <span id="stage" class="val">Stand</span></div>
+      </div>
+    </header>
+
+    <div id="tapArea">
+      <canvas id="game" width="540" height="720"></canvas>
+    </div>
+
+    <div class="btns">
+      <button id="tapBtn" class="primary accent">TAP TO SERVE 🍔</button>
+      <button id="upgradeBtn" class="primary good">Upgrade (+Per Tap)</button>
+    </div>
+
+    <footer>
+      <div class="tiny">Prototype • Saves locally</div>
+      <div>
+        <button id="saveBtn">Save</button>
+        <button id="resetBtn">Reset</button>
+      </div>
+    </footer>
+  </div>
+
+  <script src="main.js"></script>
+</body>
+</html>
