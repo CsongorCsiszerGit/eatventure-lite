@@ -3,49 +3,66 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-  <title>Eatventure-lite • Level 1 (v0.8)</title>
+  <title>Eatventure-lite v0.9</title>
   <style>
-    :root { --bg:#0f1221; --card:#171a2e; --text:#e8ecff; --muted:#a7b0d9; --accent:#6ee7ff; --good:#6ee7a0; --warn:#ffd166; }
-    * { box-sizing: border-box; }
-    html, body { height: 100%; }
-    body { margin:0; font-family: system-ui,-apple-system,Segoe UI,Roboto,Arial; background: radial-gradient(1200px 1200px at 50% -200px,#182046,var(--bg) 60%); color:var(--text); touch-action: manipulation; -webkit-tap-highlight-color: transparent; user-select:none; }
-    .wrap { display:grid; grid-template-rows:auto 1fr auto; height:100%; max-width:540px; margin:0 auto; }
-    header, footer { padding:10px 12px; background:linear-gradient(180deg,#171a2e,#12142a); border-bottom:1px solid #202645; }
-    header .row { display:flex; gap:8px; align-items:center; justify-content:space-between; flex-wrap:wrap; }
-    .stat { display:flex; gap:6px; align-items:center; padding:6px 10px; background:#12142a; border:1px solid #202645; border-radius:12px; }
-    .label { color:var(--muted); font-size:12px; }
-    .val { font-weight:700; }
-    #tapArea { display:grid; grid-template-rows:1fr auto; gap:12px; padding:12px; }
-    canvas { width:100%; height:100%; max-height:60vh; background:#0e1020; border-top:1px solid #202645; border-bottom:1px solid #202645; }
-    .btns { display:grid; grid-template-columns: 1fr 1fr; gap:10px; padding: 12px; }
-    button { appearance:none; border:1px solid #2a2f57; background:#181c39; color:var(--text); font-weight:700; border-radius:14px; padding:12px; font-size:15px; box-shadow:0 6px 0 #0c0f24; }
-    button:active { transform:translateY(2px); box-shadow:0 4px 0 #0c0f24; }
-    .primary { background:linear-gradient(180deg,#1c2250,#15193a); }
+    body {
+      margin: 0;
+      font-family: system-ui, sans-serif;
+      background: #1e1e2f;
+      color: white;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+    }
+    header {
+      display: flex;
+      justify-content: space-around;
+      background: #111;
+      padding: 8px;
+      font-size: 14px;
+    }
+    canvas {
+      display: block;
+      margin: 0 auto;
+      background: #2b2b40;
+      border: 2px solid #000;
+    }
+    footer {
+      padding: 8px;
+      text-align: center;
+      font-size: 12px;
+      color: #aaa;
+    }
+    button {
+      padding: 8px 12px;
+      margin: 5px;
+      border: none;
+      border-radius: 6px;
+      background: #333;
+      color: white;
+      font-weight: bold;
+    }
+    button:active {
+      background: #555;
+    }
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <header>
-      <div class="row">
-        <div class="stat"><span class="label">Coins</span> <span id="coins" class="val">0</span></div>
-        <div class="stat"><span class="label">Per Drink</span> <span id="price" class="val">1</span></div>
-        <div class="stat"><span class="label">Gary</span> <span id="garyState" class="val">Idle</span></div>
-      </div>
-    </header>
+  <header>
+    <div>Coins: <span id="coins">0</span></div>
+    <div>Per Drink: <span id="perDrink">1</span></div>
+    <div>Gary: <span id="garyState">Idle</span></div>
+  </header>
 
-    <div id="tapArea">
-      <canvas id="game" width="540" height="720"></canvas>
-      <div class="btns">
-        <button id="spawnBtn" class="primary">Spawn Customer (debug)</button>
-        <button id="resetBtn" class="primary">Reset</button>
-      </div>
-    </div>
+  <canvas id="game" width="360" height="540"></canvas>
 
-    <footer>
-      <div style="font-size:12px;color:#a7b0d9">Prototype • v0.8 • Saves locally</div>
-      <div><button id="saveBtn">Save</button></div>
-    </footer>
+  <div style="text-align:center;">
+    <button id="spawnBtn">Spawn Customer</button>
+    <button id="resetBtn">Reset</button>
   </div>
+
+  <footer>
+    Prototype • v0.9 • Saves locally
+  </footer>
 
   <script src="main.js"></script>
 </body>
