@@ -1,4 +1,4 @@
-// Eatventure-lite Level 1 — core mechanics only.
+// Eatventure-lite Level 1 — tuned pacing
 const $ = (s)=>document.querySelector(s);
 
 // Consistent burger icon (SVG as data URI)
@@ -25,16 +25,16 @@ const state = {
   tapPower: 1,         // serves per tap
   worker: {            // auto serves per second
     count: 0,          // 0 or 1 for L1
-    rate: 0,           // serves per second
+    rate: 0,           // serves per second (set after hire)
   },
   costs: {
-    tapUpgrade: 10,
-    hire: 100,
-    speed: 80,
-    price: 30,
+    tapUpgrade: 25,    // was 10
+    hire: 300,         // was 100
+    speed: 150,        // was 80
+    price: 80,         // was 30
   },
   upgradesBought: 0,
-  goals: { earn500:false, hire1:false, buy3:false },
+  goals: { earn1500:false, hire1:false, buy5:false }, // tougher goals
 };
 
 // ---- Elements ----
@@ -85,12 +85,12 @@ function renderUI(){
   el.upgradeTapBtn.textContent = `Upgrade Tap (+1) — ${fmt(state.costs.tapUpgrade)}`;
   el.hireBtn.textContent = state.worker.count === 0 ? `Hire Worker — ${fmt(state.costs.hire)}` : `Worker Hired`;
   el.hireBtn.disabled = state.worker.count > 0;
-  el.speedBtn.textContent = `Worker Speed (+0.5/s) — ${fmt(state.costs.speed)}`;
+  el.speedBtn.textContent = `Worker Speed (+0.4/s) — ${fmt(state.costs.speed)}`; // label matches new increment
   el.priceBtn.textContent = `Increase Price (+1) — ${fmt(state.costs.price)}`;
 
-  el.g1.textContent = state.goals.earn500 ? "✅" : "❌";
+  el.g1.textContent = state.goals.earn1500 ? "✅" : "❌";
   el.g2.textContent = state.goals.hire1 ? "✅" : "❌";
-  el.g3.textContent = state.goals.buy3 ? "✅" : "❌";
+  el.g3.textContent = state.goals.buy5 ? "✅" : "❌";
 }
 
 // ---- Core Actions ----
@@ -99,7 +99,14 @@ function serve(times){
   state.coins += serves * state.price;
 }
 
+// Tap throttling to block two-thumb spam
+let lastTap = 0;
+
 function onTap(){
+  const now = performance.now();
+  if (now - lastTap < 90) return; // ~11 taps/sec max
+  lastTap = now;
+
   serve(state.tapPower);
   pops.push({x: vw/2, y: vh*0.55, text: `+${(state.tapPower*state.price).toFixed(0)}`, t: 0});
   pulse = 1.0;
@@ -110,7 +117,7 @@ function buyTapUpgrade(){
   if (state.coins < state.costs.tapUpgrade) { flash("Not enough coins"); return; }
   state.coins -= state.costs.tapUpgrade;
   state.tapPower += 1;
-  state.costs.tapUpgrade = Math.ceil(state.costs.tapUpgrade * 1.5);
+  state.costs.tapUpgrade = Math.ceil(state.costs.tapUpgrade * 1.7); // was 1.5
   state.upgradesBought++;
   checkGoals(); save();
 }
@@ -120,15 +127,15 @@ function hireWorker(){
   if (state.coins < state.costs.hire) { flash("Not enough coins"); return; }
   state.coins -= state.costs.hire;
   state.worker.count = 1;
-  state.worker.rate = 1.0; // 1 serve/sec to start
+  state.worker.rate = 0.8; // slower start than 1.0/s
   checkGoals(); save();
 }
 
 function upgradeSpeed(){
   if (state.coins < state.costs.speed) { flash("Not enough coins"); return; }
   state.coins -= state.costs.speed;
-  state.worker.rate += 0.5;
-  state.costs.speed = Math.ceil(state.costs.speed * 1.6);
+  state.worker.rate += 0.4;                               // was +0.5
+  state.costs.speed = Math.ceil(state.costs.speed * 1.75); // was 1.6
   state.upgradesBought++;
   checkGoals(); save();
 }
@@ -137,18 +144,18 @@ function upgradePrice(){
   if (state.coins < state.costs.price) { flash("Not enough coins"); return; }
   state.coins -= state.costs.price;
   state.price += 1;
-  state.costs.price = Math.ceil(state.costs.price * 1.7);
+  state.costs.price = Math.ceil(state.costs.price * 1.9); // was 1.7
   state.upgradesBought++;
   checkGoals(); save();
 }
 
 // ---- Goals & Level Complete ----
 function checkGoals(){
-  if (state.coins >= 500) state.goals.earn500 = true;
+  if (state.coins >= 1500) state.goals.earn1500 = true;
   if (state.worker.count >= 1) state.goals.hire1 = true;
-  if (state.upgradesBought >= 3) state.goals.buy3 = true;
+  if (state.upgradesBought >= 5) state.goals.buy5 = true;
 
-  if (state.goals.earn500 && state.goals.hire1 && state.goals.buy3){
+  if (state.goals.earn1500 && state.goals.hire1 && state.goals.buy5){
     if (el.winModal.style.display !== "grid"){
       el.winModal.style.display = "grid";
     }
@@ -251,6 +258,7 @@ function flash(msg){
 // ---- Events ----
 $("#game").addEventListener("pointerdown", onTap, { passive:true });
 $("#tapBtn").addEventListener("pointerdown", onTap, { passive:true });
+$("#tapBtn").addEventListener("click", onTap); // extra for certain mobiles
 $("#upgradeTapBtn").addEventListener("pointerdown", ()=>{ buyTapUpgrade(); renderUI(); }, { passive:true });
 $("#hireBtn").addEventListener("pointerdown", ()=>{ hireWorker(); renderUI(); }, { passive:true });
 $("#speedBtn").addEventListener("pointerdown", ()=>{ upgradeSpeed(); renderUI(); }, { passive:true });
