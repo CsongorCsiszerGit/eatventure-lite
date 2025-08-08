@@ -1,5 +1,6 @@
 // Eatventure-lite Level 1 — tuned pacing
 const $ = (s)=>document.querySelector(s);
+const GAME_VERSION = "v0.7"; // update this when you make changes
 
 // Consistent burger icon (SVG as data URI)
 const burgerImg = new Image();
@@ -212,6 +213,13 @@ function draw(){
   }
 
   pulse = Math.max(0, pulse - 0.05);
+  // version label (top-left)
+ctx.textAlign = "left";
+ctx.textBaseline = "top";
+ctx.font = "14px system-ui, sans-serif";
+ctx.fillStyle = "#ffffffaa";
+ctx.fillText(GAME_VERSION, 6, 6);
+
   requestAnimationFrame(draw);
 }
 
