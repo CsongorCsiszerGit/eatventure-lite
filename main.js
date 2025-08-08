@@ -2,6 +2,15 @@
 const $ = (s)=>document.querySelector(s);
 const GAME_VERSION = "v0.7"; // update this when you make changes
 
+// Auto cache-bust in dev mode (GitHub Pages)
+if (location.hostname.includes("github.io")) {
+  const bust = Date.now();
+  document.querySelectorAll('link[rel="stylesheet"], script[src]').forEach(el => {
+    const attr = el.tagName === "SCRIPT" ? "src" : "href";
+    el[attr] += (el[attr].includes("?") ? "&" : "?") + "v=" + bust;
+  });
+}
+
 // Consistent burger icon (SVG as data URI)
 const burgerImg = new Image();
 burgerImg.src =
@@ -86,7 +95,7 @@ function renderUI(){
   el.upgradeTapBtn.textContent = `Upgrade Tap (+1) — ${fmt(state.costs.tapUpgrade)}`;
   el.hireBtn.textContent = state.worker.count === 0 ? `Hire Worker — ${fmt(state.costs.hire)}` : `Worker Hired`;
   el.hireBtn.disabled = state.worker.count > 0;
-  el.speedBtn.textContent = `Worker Speed (+0.4/s) — ${fmt(state.costs.speed)}`; // label matches new increment
+  el.speedBtn.textContent = `Worker Speed (+0.4/s) — ${fmt(state.costs.speed)}`;
   el.priceBtn.textContent = `Increase Price (+1) — ${fmt(state.costs.price)}`;
 
   el.g1.textContent = state.goals.earn1500 ? "✅" : "❌";
@@ -118,7 +127,7 @@ function buyTapUpgrade(){
   if (state.coins < state.costs.tapUpgrade) { flash("Not enough coins"); return; }
   state.coins -= state.costs.tapUpgrade;
   state.tapPower += 1;
-  state.costs.tapUpgrade = Math.ceil(state.costs.tapUpgrade * 1.7); // was 1.5
+  state.costs.tapUpgrade = Math.ceil(state.costs.tapUpgrade * 1.7);
   state.upgradesBought++;
   checkGoals(); save();
 }
@@ -128,15 +137,15 @@ function hireWorker(){
   if (state.coins < state.costs.hire) { flash("Not enough coins"); return; }
   state.coins -= state.costs.hire;
   state.worker.count = 1;
-  state.worker.rate = 0.8; // slower start than 1.0/s
+  state.worker.rate = 0.8; // slower start
   checkGoals(); save();
 }
 
 function upgradeSpeed(){
   if (state.coins < state.costs.speed) { flash("Not enough coins"); return; }
   state.coins -= state.costs.speed;
-  state.worker.rate += 0.4;                               // was +0.5
-  state.costs.speed = Math.ceil(state.costs.speed * 1.75); // was 1.6
+  state.worker.rate += 0.4;
+  state.costs.speed = Math.ceil(state.costs.speed * 1.75);
   state.upgradesBought++;
   checkGoals(); save();
 }
@@ -145,7 +154,7 @@ function upgradePrice(){
   if (state.coins < state.costs.price) { flash("Not enough coins"); return; }
   state.coins -= state.costs.price;
   state.price += 1;
-  state.costs.price = Math.ceil(state.costs.price * 1.9); // was 1.7
+  state.costs.price = Math.ceil(state.costs.price * 1.9);
   state.upgradesBought++;
   checkGoals(); save();
 }
@@ -169,11 +178,9 @@ let pulse = 0;
 let pops = [];
 
 function draw(){
-  // bg
   ctx.fillStyle = "#2b3e6e";
   ctx.fillRect(0,0,vw,vh);
 
-  // counter card
   const cardW = vw*0.8, cardH = vh*0.22;
   const cx = (vw-cardW)/2, cy = vh*0.12;
   ctx.fillStyle = "#12142a";
@@ -181,25 +188,21 @@ function draw(){
   ctx.lineWidth = 4;
   roundRect(ctx, cx, cy, cardW, cardH, 18, true, true);
 
-  // coins text
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillStyle = "#e8ecff";
   ctx.font = "700 42px system-ui, -apple-system, Segoe UI, Roboto, Arial";
   ctx.fillText(fmt(state.coins), vw/2, cy + cardH/2);
 
-  // burger button (visual)
   const r = Math.floor(vw*0.22 * (1 + 0.08*pulse));
   const cx2 = vw/2, cy2 = vh*0.62;
   ctx.beginPath(); ctx.arc(cx2, cy2, r, 0, Math.PI*2); ctx.closePath();
   ctx.fillStyle = "#1c2250"; ctx.fill();
   ctx.strokeStyle = "#0c0f24"; ctx.lineWidth = 6; ctx.stroke();
 
-  // burger image
   const size = r * 1.6;
   ctx.drawImage(burgerImg, cx2 - size/2, cy2 - size/2, size, size);
 
-  // floating pops
   for (let i=pops.length-1;i>=0;i--){
     const p = pops[i];
     p.t += 0.016;
@@ -213,12 +216,13 @@ function draw(){
   }
 
   pulse = Math.max(0, pulse - 0.05);
-  // version label (top-left)
-ctx.textAlign = "left";
-ctx.textBaseline = "top";
-ctx.font = "14px system-ui, sans-serif";
-ctx.fillStyle = "#ffffffaa";
-ctx.fillText(GAME_VERSION, 6, 6);
+
+  // version label
+  ctx.textAlign = "left";
+  ctx.textBaseline = "top";
+  ctx.font = "14px system-ui, sans-serif";
+  ctx.fillStyle = "#ffffffaa";
+  ctx.fillText(GAME_VERSION, 6, 6);
 
   requestAnimationFrame(draw);
 }
@@ -266,7 +270,7 @@ function flash(msg){
 // ---- Events ----
 $("#game").addEventListener("pointerdown", onTap, { passive:true });
 $("#tapBtn").addEventListener("pointerdown", onTap, { passive:true });
-$("#tapBtn").addEventListener("click", onTap); // extra for certain mobiles
+$("#tapBtn").addEventListener("click", onTap);
 $("#upgradeTapBtn").addEventListener("pointerdown", ()=>{ buyTapUpgrade(); renderUI(); }, { passive:true });
 $("#hireBtn").addEventListener("pointerdown", ()=>{ hireWorker(); renderUI(); }, { passive:true });
 $("#speedBtn").addEventListener("pointerdown", ()=>{ upgradeSpeed(); renderUI(); }, { passive:true });
