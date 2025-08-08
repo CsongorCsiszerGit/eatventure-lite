@@ -1,287 +1,229 @@
-// Eatventure-lite Level 1 — tuned pacing
+// Eatventure-lite • Level 1 — v0.8 (Gary + Customer + Machine loop)
 const $ = (s)=>document.querySelector(s);
-const GAME_VERSION = "v0.7"; // update this when you make changes
+const GAME_VERSION = "v0.8";
 
-// Auto cache-bust in dev mode (GitHub Pages)
+// Auto cache-bust on GitHub Pages while we iterate
 if (location.hostname.includes("github.io")) {
   const bust = Date.now();
-  document.querySelectorAll('link[rel="stylesheet"], script[src]').forEach(el => {
-    const attr = el.tagName === "SCRIPT" ? "src" : "href";
-    el[attr] += (el[attr].includes("?") ? "&" : "?") + "v=" + bust;
+  document.querySelectorAll('script[src],link[rel="stylesheet"]').forEach(el=>{
+    const k = el.tagName==="SCRIPT" ? "src" : "href";
+    el[k] += (el[k].includes("?")?"&":"?")+"v="+bust;
   });
 }
 
-// Consistent burger icon (SVG as data URI)
-const burgerImg = new Image();
-burgerImg.src =
-  'data:image/svg+xml;utf8,' +
-  encodeURIComponent(`
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
-  <rect x="16" y="70" width="96" height="16" rx="8" fill="#7a3e2d"/>
-  <rect x="12" y="58" width="104" height="12" rx="6" fill="#3b7420"/>
-  <rect x="10" y="44" width="108" height="14" rx="8" fill="#e8b04b"/>
-  <rect x="8"  y="28" width="112" height="18" rx="9" fill="#f5c26b"/>
-  <circle cx="28" cy="34" r="2" fill="#fff6c7"/>
-  <circle cx="44" cy="31" r="2" fill="#fff6c7"/>
-  <circle cx="64" cy="35" r="2" fill="#fff6c7"/>
-  <circle cx="84" cy="32" r="2" fill="#fff6c7"/>
-  <circle cx="100" cy="36" r="2" fill="#fff6c7"/>
-</svg>`);
-
-// ---- Game State ----
+// --- State ---
 const state = {
   coins: 0,
-  price: 1,            // coins earned per serve
-  tapPower: 1,         // serves per tap
-  worker: {            // auto serves per second
-    count: 0,          // 0 or 1 for L1
-    rate: 0,           // serves per second (set after hire)
+  price: 1,               // coins per lemonade
+  customers: [],          // queue (max 1 visible for v0.8)
+  gary: {
+    x: 270, y: 520,       // start near counter
+    speed: 140,           // px/s
+    task: "idle",         // idle|toCustomer|takingOrder|toMachine|prepping|toCustomerDeliver|delivering
+    timer: 0,             // for actions
+    target: {x:270, y:520}
   },
-  costs: {
-    tapUpgrade: 25,    // was 10
-    hire: 300,         // was 100
-    speed: 150,        // was 80
-    price: 80,         // was 30
-  },
-  upgradesBought: 0,
-  goals: { earn1500:false, hire1:false, buy5:false }, // tougher goals
+  // timings (seconds)
+  ORDER_TIME: 1.5,
+  PREP_TIME: 2.0,
+  // positions
+  points: {
+    counter: { x: 270, y: 520 },       // where customer stands
+    queue:   { x: 270, y: 600 },       // spawn point
+    machine: { x: 270, y: 640 },       // lemonade machine (red arrow area)
+  }
 };
 
-// ---- Elements ----
 const el = {
   coins: $("#coins"),
-  perTap: $("#perTap"),
   price: $("#price"),
-  worker: $("#worker"),
-  tapBtn: $("#tapBtn"),
-  upgradeTapBtn: $("#upgradeTapBtn"),
-  hireBtn: $("#hireBtn"),
-  speedBtn: $("#speedBtn"),
-  priceBtn: $("#priceBtn"),
-  saveBtn: $("#saveBtn"),
-  resetBtn: $("#resetBtn"),
+  garyState: $("#garyState"),
   canvas: $("#game"),
-  g1: $("#g1"), g2: $("#g2"), g3: $("#g3"),
-  winModal: $("#winModal"),
-  closeModal: $("#closeModal"),
+  spawnBtn: $("#spawnBtn"),
+  resetBtn: $("#resetBtn"),
+  saveBtn: $("#saveBtn"),
 };
 
 const ctx = el.canvas.getContext("2d");
 let vw = el.canvas.width, vh = el.canvas.height;
 
-// ---- Save/Load ----
+// --- Save/Load ---
 function load(){
   try {
-    const raw = localStorage.getItem("evlite_l1");
+    const raw = localStorage.getItem("evlite_flow");
     if (raw) Object.assign(state, JSON.parse(raw));
   } catch(e){}
 }
-function save(){
-  localStorage.setItem("evlite_l1", JSON.stringify(state));
-}
-function reset(){
-  localStorage.removeItem("evlite_l1");
-  location.reload();
+function save(){ localStorage.setItem("evlite_flow", JSON.stringify(state)); }
+function reset(){ localStorage.removeItem("evlite_flow"); location.reload(); }
+
+// --- Utils ---
+const fmt = (n)=> n>=1e6 ? (n/1e6).toFixed(1)+"M" : n>=1e3 ? (n/1e3).toFixed(1)+"K" : Math.floor(n).toString();
+function dist(a,b){ const dx=a.x-b.x, dy=a.y-b.y; return Math.hypot(dx,dy); }
+function moveTowards(p, target, maxStep){
+  const d = dist(p,target); if (d<=maxStep || d===0){ p.x=target.x; p.y=target.y; return true; }
+  p.x += (target.x - p.x) * (maxStep/d);
+  p.y += (target.y - p.y) * (maxStep/d);
+  return false;
 }
 
-// ---- UI ----
-const fmt = (n)=> n>=1e6 ? (n/1e6).toFixed(1)+"M" : n>=1e3 ? (n/1e3).toFixed(1)+"K" : Math.floor(n).toString();
+// --- Customer logic ---
+function spawnCustomer(){
+  // Only one visible customer for v0.8 (simple)
+  if (state.customers.length>0) return;
+  state.customers.push({ x: state.points.queue.x, y: state.points.queue.y, state:"waiting" });
+}
+function activeCustomer(){ return state.customers[0] || null; }
+function removeCustomer(){ state.customers.shift(); }
+
+// --- Gary state machine ---
+function updateGary(dt){
+  const g = state.gary;
+  const cust = activeCustomer();
+  switch(g.task){
+    case "idle":
+      if (cust && cust.state==="waiting"){
+        g.target = state.points.counter;
+        g.task = "toCustomer";
+      }
+      break;
+    case "toCustomer":
+      if (moveTowards(g, g.target, g.speed*dt)){
+        g.task = "takingOrder";
+        g.timer = state.ORDER_TIME;
+      }
+      break;
+    case "takingOrder":
+      g.timer -= dt;
+      if (g.timer<=0){
+        if (cust) cust.state="ordered";
+        g.target = state.points.machine;
+        g.task = "toMachine";
+      }
+      break;
+    case "toMachine":
+      if (moveTowards(g, g.target, g.speed*dt)){
+        g.task = "prepping";
+        g.timer = state.PREP_TIME;
+      }
+      break;
+    case "prepping":
+      g.timer -= dt;
+      if (g.timer<=0){
+        g.target = state.points.counter;
+        g.task = "toCustomerDeliver";
+      }
+      break;
+    case "toCustomerDeliver":
+      if (moveTowards(g, g.target, g.speed*dt)){
+        g.task = "delivering";
+        g.timer = 0.3; // quick handover
+      }
+      break;
+    case "delivering":
+      g.timer -= dt;
+      if (g.timer<=0){
+        // complete order
+        state.coins += state.price;
+        if (cust) cust.state="served";
+        removeCustomer();
+        g.task = "idle";
+      }
+      break;
+  }
+}
+
+// --- UI ---
 function renderUI(){
   el.coins.textContent = fmt(state.coins);
-  el.perTap.textContent = fmt(state.tapPower);
   el.price.textContent = fmt(state.price);
-  el.worker.textContent = `${state.worker.rate.toFixed(1)}/s`;
-
-  el.upgradeTapBtn.textContent = `Upgrade Tap (+1) — ${fmt(state.costs.tapUpgrade)}`;
-  el.hireBtn.textContent = state.worker.count === 0 ? `Hire Worker — ${fmt(state.costs.hire)}` : `Worker Hired`;
-  el.hireBtn.disabled = state.worker.count > 0;
-  el.speedBtn.textContent = `Worker Speed (+0.4/s) — ${fmt(state.costs.speed)}`;
-  el.priceBtn.textContent = `Increase Price (+1) — ${fmt(state.costs.price)}`;
-
-  el.g1.textContent = state.goals.earn1500 ? "✅" : "❌";
-  el.g2.textContent = state.goals.hire1 ? "✅" : "❌";
-  el.g3.textContent = state.goals.buy5 ? "✅" : "❌";
+  el.garyState.textContent = state.gary.task[0].toUpperCase()+state.gary.task.slice(1);
 }
 
-// ---- Core Actions ----
-function serve(times){
-  const serves = Math.max(0, times);
-  state.coins += serves * state.price;
-}
-
-// Tap throttling to block two-thumb spam
-let lastTap = 0;
-
-function onTap(){
-  const now = performance.now();
-  if (now - lastTap < 90) return; // ~11 taps/sec max
-  lastTap = now;
-
-  serve(state.tapPower);
-  pops.push({x: vw/2, y: vh*0.55, text: `+${(state.tapPower*state.price).toFixed(0)}`, t: 0});
-  pulse = 1.0;
-  checkGoals();
-}
-
-function buyTapUpgrade(){
-  if (state.coins < state.costs.tapUpgrade) { flash("Not enough coins"); return; }
-  state.coins -= state.costs.tapUpgrade;
-  state.tapPower += 1;
-  state.costs.tapUpgrade = Math.ceil(state.costs.tapUpgrade * 1.7);
-  state.upgradesBought++;
-  checkGoals(); save();
-}
-
-function hireWorker(){
-  if (state.worker.count > 0) return;
-  if (state.coins < state.costs.hire) { flash("Not enough coins"); return; }
-  state.coins -= state.costs.hire;
-  state.worker.count = 1;
-  state.worker.rate = 0.8; // slower start
-  checkGoals(); save();
-}
-
-function upgradeSpeed(){
-  if (state.coins < state.costs.speed) { flash("Not enough coins"); return; }
-  state.coins -= state.costs.speed;
-  state.worker.rate += 0.4;
-  state.costs.speed = Math.ceil(state.costs.speed * 1.75);
-  state.upgradesBought++;
-  checkGoals(); save();
-}
-
-function upgradePrice(){
-  if (state.coins < state.costs.price) { flash("Not enough coins"); return; }
-  state.coins -= state.costs.price;
-  state.price += 1;
-  state.costs.price = Math.ceil(state.costs.price * 1.9);
-  state.upgradesBought++;
-  checkGoals(); save();
-}
-
-// ---- Goals & Level Complete ----
-function checkGoals(){
-  if (state.coins >= 1500) state.goals.earn1500 = true;
-  if (state.worker.count >= 1) state.goals.hire1 = true;
-  if (state.upgradesBought >= 5) state.goals.buy5 = true;
-
-  if (state.goals.earn1500 && state.goals.hire1 && state.goals.buy5){
-    if (el.winModal.style.display !== "grid"){
-      el.winModal.style.display = "grid";
-    }
-  }
-  renderUI();
-}
-
-// ---- Loop ----
-let pulse = 0;
-let pops = [];
-
+// --- Draw ---
 function draw(){
+  // background scene
   ctx.fillStyle = "#2b3e6e";
   ctx.fillRect(0,0,vw,vh);
 
-  const cardW = vw*0.8, cardH = vh*0.22;
-  const cx = (vw-cardW)/2, cy = vh*0.12;
-  ctx.fillStyle = "#12142a";
-  ctx.strokeStyle = "#202645";
-  ctx.lineWidth = 4;
-  roundRect(ctx, cx, cy, cardW, cardH, 18, true, true);
+  // counter area
+  ctx.fillStyle = "#1b2448";
+  ctx.fillRect(60, 460, vw-120, 160);
 
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillStyle = "#e8ecff";
-  ctx.font = "700 42px system-ui, -apple-system, Segoe UI, Roboto, Arial";
-  ctx.fillText(fmt(state.coins), vw/2, cy + cardH/2);
+  // counter table
+  ctx.fillStyle = "#283060";
+  ctx.beginPath(); ctx.roundRect(120, 490, vw-240, 60, 18); ctx.fill();
+  ctx.strokeStyle = "#0c0f24"; ctx.lineWidth = 4; ctx.stroke();
 
-  const r = Math.floor(vw*0.22 * (1 + 0.08*pulse));
-  const cx2 = vw/2, cy2 = vh*0.62;
-  ctx.beginPath(); ctx.arc(cx2, cy2, r, 0, Math.PI*2); ctx.closePath();
-  ctx.fillStyle = "#1c2250"; ctx.fill();
-  ctx.strokeStyle = "#0c0f24"; ctx.lineWidth = 6; ctx.stroke();
+  // machine pad
+  ctx.fillStyle = "#2c3568";
+  ctx.beginPath(); ctx.roundRect(state.points.machine.x-40, state.points.machine.y-24, 80, 40, 10); ctx.fill();
 
-  const size = r * 1.6;
-  ctx.drawImage(burgerImg, cx2 - size/2, cy2 - size/2, size, size);
+  // machine box
+  ctx.fillStyle = "#33407a";
+  ctx.fillRect(state.points.machine.x-22, state.points.machine.y-50, 44, 40);
 
-  for (let i=pops.length-1;i>=0;i--){
-    const p = pops[i];
-    p.t += 0.016;
-    const a = Math.max(0, 1 - p.t/0.8);
-    ctx.globalAlpha = a;
-    ctx.font = "700 28px system-ui, -apple-system, Segoe UI, Roboto, Arial";
-    ctx.fillStyle = "#6ee7a0";
-    ctx.fillText(p.text, p.x, p.y - p.t*60);
-    ctx.globalAlpha = 1;
-    if (a <= 0) pops.splice(i,1);
+  // customer (simple circle)
+  const cust = activeCustomer();
+  if (cust){
+    ctx.fillStyle = "#e6a5b4"; // hat
+    ctx.beginPath(); ctx.arc(cust.x, cust.y-28, 14, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = "#f3d2a2"; // head
+    ctx.beginPath(); ctx.arc(cust.x, cust.y-10, 12, 0, Math.PI*2); ctx.fill();
+    // speech bubble "🍹"
+    ctx.fillStyle = "#11162f"; ctx.beginPath(); ctx.roundRect(cust.x-18, cust.y-56, 36, 24, 8); ctx.fill();
+    ctx.fillStyle = "#e8ecff"; ctx.font = "16px system-ui, sans-serif"; ctx.textAlign="center"; ctx.textBaseline="middle";
+    ctx.fillText("🍹", cust.x, cust.y-44);
   }
 
-  pulse = Math.max(0, pulse - 0.05);
+  // Gary
+  const g = state.gary;
+  ctx.fillStyle = "#6ee7ff";
+  ctx.beginPath(); ctx.arc(g.x, g.y-10, 14, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = "#0c0f24"; ctx.fillRect(g.x-12, g.y+2, 24, 6); // feet/shadow
 
   // version label
-  ctx.textAlign = "left";
-  ctx.textBaseline = "top";
-  ctx.font = "14px system-ui, sans-serif";
-  ctx.fillStyle = "#ffffffaa";
-  ctx.fillText(GAME_VERSION, 6, 6);
+  ctx.textAlign = "left"; ctx.textBaseline = "top"; ctx.font = "14px system-ui, sans-serif";
+  ctx.fillStyle = "#ffffffaa"; ctx.fillText(GAME_VERSION, 6, 6);
 
   requestAnimationFrame(draw);
 }
 
-function roundRect(ctx, x, y, w, h, r, fill, stroke){
-  if (w < 2*r) r = w/2;
-  if (h < 2*r) r = h/2;
-  ctx.beginPath();
-  ctx.moveTo(x+r, y);
-  ctx.arcTo(x+w, y, x+w, y+h, r);
-  ctx.arcTo(x+w, y+h, x, y+h, r);
-  ctx.arcTo(x, y+h, x, y, r);
-  ctx.arcTo(x, y, x+w, y, r);
-  ctx.closePath();
-  if (fill) ctx.fill();
-  if (stroke) ctx.stroke();
-}
-
-// ---- Timers ----
+// --- Loop ---
 let last = performance.now();
 function step(ts){
-  const dt = Math.min(0.25, (ts - last) / 1000);
+  const dt = Math.min(0.05, (ts - last)/1000); // clamp dt
   last = ts;
-  if (state.worker.rate > 0){
-    serve(state.worker.rate * dt);
-  }
+
+  updateGary(dt);
+  renderUI();
   requestAnimationFrame(step);
 }
 
+// --- Events ---
+el.spawnBtn.addEventListener("pointerdown", ()=>{ spawnCustomer(); save(); });
+el.resetBtn.addEventListener("pointerdown", reset);
+el.saveBtn.addEventListener("pointerdown", ()=>{ save(); flash("Saved"); });
+
+// --- Toast ---
 function flash(msg){
   if (!document.getElementById("toast")){
     const t = document.createElement("div");
     t.id = "toast";
-    Object.assign(t.style, { position:"fixed", left:"50%", top:"12px", transform:"translateX(-50%)",
-      background:"#11162f", color:"#e8ecff", padding:"10px 14px", borderRadius:"12px",
-      border:"1px solid #202645", zIndex:9999, fontWeight:"700" });
+    Object.assign(t.style,{position:"fixed",left:"50%",top:"12px",transform:"translateX(-50%)",
+      background:"#11162f",color:"#e8ecff",padding:"10px 14px",borderRadius:"12px",
+      border:"1px solid #202645",zIndex:9999,fontWeight:"700"});
     document.body.appendChild(t);
   }
   const t = document.getElementById("toast");
-  t.textContent = msg;
-  t.style.opacity = "1";
-  setTimeout(()=>{ t.style.opacity = "0"; }, 1200);
+  t.textContent = msg; t.style.opacity="1"; setTimeout(()=> t.style.opacity="0", 1200);
 }
 
-// ---- Events ----
-$("#game").addEventListener("pointerdown", onTap, { passive:true });
-$("#tapBtn").addEventListener("pointerdown", onTap, { passive:true });
-$("#tapBtn").addEventListener("click", onTap);
-$("#upgradeTapBtn").addEventListener("pointerdown", ()=>{ buyTapUpgrade(); renderUI(); }, { passive:true });
-$("#hireBtn").addEventListener("pointerdown", ()=>{ hireWorker(); renderUI(); }, { passive:true });
-$("#speedBtn").addEventListener("pointerdown", ()=>{ upgradeSpeed(); renderUI(); }, { passive:true });
-$("#priceBtn").addEventListener("pointerdown", ()=>{ upgradePrice(); renderUI(); }, { passive:true });
-$("#saveBtn").addEventListener("pointerdown", ()=>{ save(); flash("Saved"); }, { passive:true });
-$("#resetBtn").addEventListener("pointerdown", reset, { passive:true });
-$("#closeModal").addEventListener("pointerdown", ()=>{ $("#winModal").style.display="none"; }, { passive:true });
-
-// ---- Init ----
+// --- Start ---
 load();
 renderUI();
 requestAnimationFrame(step);
 draw();
-setInterval(()=>{ save(); checkGoals(); }, 2000);
+
+// Optional: auto-spawn a customer every 4–7s for demo
+setInterval(()=>{ if (!activeCustomer()) spawnCustomer(); }, 4500);
