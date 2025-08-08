@@ -1,7 +1,7 @@
-// Eatventure-lite Starter (no libs). Mobile-first. Pointer Events.
+// Eatventure-lite Level 1 — core mechanics only.
 const $ = (s)=>document.querySelector(s);
 
-// Consistent burger icon (SVG as data URI), same on all devices
+// Consistent burger icon (SVG as data URI)
 const burgerImg = new Image();
 burgerImg.src =
   'data:image/svg+xml;utf8,' +
@@ -18,103 +18,151 @@ burgerImg.src =
   <circle cx="100" cy="36" r="2" fill="#fff6c7"/>
 </svg>`);
 
+// ---- Game State ----
 const state = {
   coins: 0,
-  perTap: 1,
-  upgradeCost: 10,
-  stageIdx: 0,
-  stages: [
-    { name: "Stand", color: "#26325f" },
-    { name: "Food Truck", color: "#2b3e6e" },
-    { name: "Cafe", color: "#314a7d" },
-    { name: "Diner", color: "#37568c" },
-    { name: "Restaurant", color: "#3d629b" },
-  ]
+  price: 1,            // coins earned per serve
+  tapPower: 1,         // serves per tap
+  worker: {            // auto serves per second
+    count: 0,          // 0 or 1 for L1
+    rate: 0,           // serves per second
+  },
+  costs: {
+    tapUpgrade: 10,
+    hire: 100,
+    speed: 80,
+    price: 30,
+  },
+  upgradesBought: 0,
+  goals: { earn500:false, hire1:false, buy3:false },
 };
 
+// ---- Elements ----
 const el = {
   coins: $("#coins"),
   perTap: $("#perTap"),
-  stage: $("#stage"),
+  price: $("#price"),
+  worker: $("#worker"),
   tapBtn: $("#tapBtn"),
-  upgradeBtn: $("#upgradeBtn"),
+  upgradeTapBtn: $("#upgradeTapBtn"),
+  hireBtn: $("#hireBtn"),
+  speedBtn: $("#speedBtn"),
+  priceBtn: $("#priceBtn"),
   saveBtn: $("#saveBtn"),
   resetBtn: $("#resetBtn"),
   canvas: $("#game"),
+  g1: $("#g1"), g2: $("#g2"), g3: $("#g3"),
+  winModal: $("#winModal"),
+  closeModal: $("#closeModal"),
 };
 
 const ctx = el.canvas.getContext("2d");
 let vw = el.canvas.width, vh = el.canvas.height;
 
-// --- Utils
-const fmt = (n)=> n>=1e6 ? (n/1e6).toFixed(1)+"M" : n>=1e3 ? (n/1e3).toFixed(1)+"K" : Math.floor(n).toString();
-const clamp = (v,a,b)=> Math.max(a, Math.min(b,v));
-
-function load() {
+// ---- Save/Load ----
+function load(){
   try {
-    const raw = localStorage.getItem("evlite");
-    if (raw) {
-      const saved = JSON.parse(raw);
-      Object.assign(state, saved);
-    }
-  } catch(e){ console.warn("No save"); }
+    const raw = localStorage.getItem("evlite_l1");
+    if (raw) Object.assign(state, JSON.parse(raw));
+  } catch(e){}
 }
-function save() {
-  localStorage.setItem("evlite", JSON.stringify({
-    coins: state.coins,
-    perTap: state.perTap,
-    upgradeCost: state.upgradeCost,
-    stageIdx: state.stageIdx,
-    stages: state.stages,
-  }));
+function save(){
+  localStorage.setItem("evlite_l1", JSON.stringify(state));
+}
+function reset(){
+  localStorage.removeItem("evlite_l1");
+  location.reload();
 }
 
-function reset() {
-  state.coins = 0;
-  state.perTap = 1;
-  state.upgradeCost = 10;
-  state.stageIdx = 0;
-  save();
-  flash("Reset!");
-}
-
+// ---- UI ----
+const fmt = (n)=> n>=1e6 ? (n/1e6).toFixed(1)+"M" : n>=1e3 ? (n/1e3).toFixed(1)+"K" : Math.floor(n).toString();
 function renderUI(){
   el.coins.textContent = fmt(state.coins);
-  el.perTap.textContent = fmt(state.perTap);
-  el.stage.textContent = state.stages[state.stageIdx].name;
-  el.upgradeBtn.textContent = `Upgrade (+${fmt(Math.max(1, Math.floor(state.perTap*0.5)))}) — ${fmt(state.upgradeCost)} 💰`;
+  el.perTap.textContent = fmt(state.tapPower);
+  el.price.textContent = fmt(state.price);
+  el.worker.textContent = `${state.worker.rate.toFixed(1)}/s`;
+
+  el.upgradeTapBtn.textContent = `Upgrade Tap (+1) — ${fmt(state.costs.tapUpgrade)}`;
+  el.hireBtn.textContent = state.worker.count === 0 ? `Hire Worker — ${fmt(state.costs.hire)}` : `Worker Hired`;
+  el.hireBtn.disabled = state.worker.count > 0;
+  el.speedBtn.textContent = `Worker Speed (+0.5/s) — ${fmt(state.costs.speed)}`;
+  el.priceBtn.textContent = `Increase Price (+1) — ${fmt(state.costs.price)}`;
+
+  el.g1.textContent = state.goals.earn500 ? "✅" : "❌";
+  el.g2.textContent = state.goals.hire1 ? "✅" : "❌";
+  el.g3.textContent = state.goals.buy3 ? "✅" : "❌";
 }
 
-// --- Input
+// ---- Core Actions ----
+function serve(times){
+  const serves = Math.max(0, times);
+  state.coins += serves * state.price;
+}
+
 function onTap(){
-  state.coins += state.perTap;
-  pops.push({x: vw/2, y: vh*0.55, text: `+${fmt(state.perTap)}`, t: 0});
+  serve(state.tapPower);
+  pops.push({x: vw/2, y: vh*0.55, text: `+${(state.tapPower*state.price).toFixed(0)}`, t: 0});
   pulse = 1.0;
+  checkGoals();
 }
 
-function canUpgrade() { return state.coins >= state.upgradeCost; }
+function buyTapUpgrade(){
+  if (state.coins < state.costs.tapUpgrade) { flash("Not enough coins"); return; }
+  state.coins -= state.costs.tapUpgrade;
+  state.tapPower += 1;
+  state.costs.tapUpgrade = Math.ceil(state.costs.tapUpgrade * 1.5);
+  state.upgradesBought++;
+  checkGoals(); save();
+}
 
-function doUpgrade(){
-  if (!canUpgrade()) { flash("Not enough coins"); return; }
-  state.coins -= state.upgradeCost;
-  const inc = Math.max(1, Math.floor(state.perTap * 0.5));
-  state.perTap += inc;
-  state.upgradeCost = Math.ceil(state.upgradeCost * 1.45);
-  if (state.perTap >= (5 * (state.stageIdx+1)) && state.stageIdx < state.stages.length-1) {
-    state.stageIdx++;
-    flash("New stage unlocked!");
+function hireWorker(){
+  if (state.worker.count > 0) return;
+  if (state.coins < state.costs.hire) { flash("Not enough coins"); return; }
+  state.coins -= state.costs.hire;
+  state.worker.count = 1;
+  state.worker.rate = 1.0; // 1 serve/sec to start
+  checkGoals(); save();
+}
+
+function upgradeSpeed(){
+  if (state.coins < state.costs.speed) { flash("Not enough coins"); return; }
+  state.coins -= state.costs.speed;
+  state.worker.rate += 0.5;
+  state.costs.speed = Math.ceil(state.costs.speed * 1.6);
+  state.upgradesBought++;
+  checkGoals(); save();
+}
+
+function upgradePrice(){
+  if (state.coins < state.costs.price) { flash("Not enough coins"); return; }
+  state.coins -= state.costs.price;
+  state.price += 1;
+  state.costs.price = Math.ceil(state.costs.price * 1.7);
+  state.upgradesBought++;
+  checkGoals(); save();
+}
+
+// ---- Goals & Level Complete ----
+function checkGoals(){
+  if (state.coins >= 500) state.goals.earn500 = true;
+  if (state.worker.count >= 1) state.goals.hire1 = true;
+  if (state.upgradesBought >= 3) state.goals.buy3 = true;
+
+  if (state.goals.earn500 && state.goals.hire1 && state.goals.buy3){
+    if (el.winModal.style.display !== "grid"){
+      el.winModal.style.display = "grid";
+    }
   }
-  save();
+  renderUI();
 }
 
-// --- Canvas simple scene
+// ---- Loop ----
 let pulse = 0;
 let pops = [];
 
 function draw(){
-  const st = state.stages[state.stageIdx];
   // bg
-  ctx.fillStyle = st.color;
+  ctx.fillStyle = "#2b3e6e";
   ctx.fillRect(0,0,vw,vh);
 
   // counter card
@@ -132,14 +180,14 @@ function draw(){
   ctx.font = "700 42px system-ui, -apple-system, Segoe UI, Roboto, Arial";
   ctx.fillText(fmt(state.coins), vw/2, cy + cardH/2);
 
-  // burger button (visual) in center
+  // burger button (visual)
   const r = Math.floor(vw*0.22 * (1 + 0.08*pulse));
   const cx2 = vw/2, cy2 = vh*0.62;
   ctx.beginPath(); ctx.arc(cx2, cy2, r, 0, Math.PI*2); ctx.closePath();
   ctx.fillStyle = "#1c2250"; ctx.fill();
   ctx.strokeStyle = "#0c0f24"; ctx.lineWidth = 6; ctx.stroke();
 
-  // burger image (consistent across devices)
+  // burger image
   const size = r * 1.6;
   ctx.drawImage(burgerImg, cx2 - size/2, cy2 - size/2, size, size);
 
@@ -147,7 +195,7 @@ function draw(){
   for (let i=pops.length-1;i>=0;i--){
     const p = pops[i];
     p.t += 0.016;
-    const a = clamp(1 - p.t/0.8, 0, 1);
+    const a = Math.max(0, 1 - p.t/0.8);
     ctx.globalAlpha = a;
     ctx.font = "700 28px system-ui, -apple-system, Segoe UI, Roboto, Arial";
     ctx.fillStyle = "#6ee7a0";
@@ -174,47 +222,46 @@ function roundRect(ctx, x, y, w, h, r, fill, stroke){
   if (stroke) ctx.stroke();
 }
 
-// Pointer Events on canvas + button
-el.canvas.addEventListener("pointerdown", onTap, { passive: true });
-el.tapBtn.addEventListener("pointerdown", onTap, { passive: true });
-el.upgradeBtn.addEventListener("pointerdown", ()=>{ doUpgrade(); renderUI(); }, { passive: true });
-el.saveBtn.addEventListener("pointerdown", ()=>{ save(); flash("Saved"); }, { passive: true });
-el.resetBtn.addEventListener("pointerdown", ()=>{ reset(); renderUI(); }, { passive: true });
-
-// Resize handling (keeps internal resolution steady for simplicity)
-function onResize(){
-  // Keep canvas internal size fixed (540x720) for now; CSS scales for device.
+// ---- Timers ----
+let last = performance.now();
+function step(ts){
+  const dt = Math.min(0.25, (ts - last) / 1000);
+  last = ts;
+  if (state.worker.rate > 0){
+    serve(state.worker.rate * dt);
+  }
+  requestAnimationFrame(step);
 }
-window.addEventListener("resize", onResize);
 
-// Toasts
-let toastTimer = null;
 function flash(msg){
   if (!document.getElementById("toast")){
     const t = document.createElement("div");
     t.id = "toast";
-    Object.assign(t.style, {
-      position:"fixed", left:"50%", top:"12px", transform:"translateX(-50%)",
+    Object.assign(t.style, { position:"fixed", left:"50%", top:"12px", transform:"translateX(-50%)",
       background:"#11162f", color:"#e8ecff", padding:"10px 14px", borderRadius:"12px",
-      border:"1px solid #202645", zIndex:9999, fontWeight:"700"
-    });
+      border:"1px solid #202645", zIndex:9999, fontWeight:"700" });
     document.body.appendChild(t);
   }
   const t = document.getElementById("toast");
   t.textContent = msg;
   t.style.opacity = "1";
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(()=>{ t.style.opacity = "0"; }, 1200);
+  setTimeout(()=>{ t.style.opacity = "0"; }, 1200);
 }
 
-// Loop & init
-function tick(){
-  renderUI();
-}
-setInterval(tick, 250); // lightweight UI sync
+// ---- Events ----
+$("#game").addEventListener("pointerdown", onTap, { passive:true });
+$("#tapBtn").addEventListener("pointerdown", onTap, { passive:true });
+$("#upgradeTapBtn").addEventListener("pointerdown", ()=>{ buyTapUpgrade(); renderUI(); }, { passive:true });
+$("#hireBtn").addEventListener("pointerdown", ()=>{ hireWorker(); renderUI(); }, { passive:true });
+$("#speedBtn").addEventListener("pointerdown", ()=>{ upgradeSpeed(); renderUI(); }, { passive:true });
+$("#priceBtn").addEventListener("pointerdown", ()=>{ upgradePrice(); renderUI(); }, { passive:true });
+$("#saveBtn").addEventListener("pointerdown", ()=>{ save(); flash("Saved"); }, { passive:true });
+$("#resetBtn").addEventListener("pointerdown", reset, { passive:true });
+$("#closeModal").addEventListener("pointerdown", ()=>{ $("#winModal").style.display="none"; }, { passive:true });
 
+// ---- Init ----
 load();
 renderUI();
+requestAnimationFrame(step);
 draw();
-// Auto-save
-setInterval(save, 5000);
+setInterval(()=>{ save(); checkGoals(); }, 2000);
